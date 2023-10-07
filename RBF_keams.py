@@ -35,7 +35,7 @@ class RBF(object):
             variances_broadcast_rbf = np.full_like(train_x_centers_distance, self.variances_rbf)  # 将variances_rbf广播成train_x_centers_distance的形状
 
         elif self.method_rbf == 'max_centers_distance_divided_by_k':
-            self.variances_rbf = self.max_centers_distance_rbf/self.k
+            self.variances_rbf = self.max_centers_distance_rbf/np.sqrt(2*self.k)
             variances_broadcast_rbf = np.full_like(train_x_centers_distance, self.variances_rbf)
         hidden_layer_output_rbf = np.exp(-(train_x_centers_distance / variances_broadcast_rbf) ** 2)  # 计算隐含层输出
         ones_column = np.ones((hidden_layer_output_rbf.shape[0], 1))  # 创建一个形状为(centers_centers_distance.shape[0], 1) 的全为1的列
