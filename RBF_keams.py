@@ -65,7 +65,7 @@ if __name__ == '__main__':
     lb = 0.0  # 下边界
     n = 100  # 数据的数量
     d = 1  # 数据的维度
-    k = [3, 6, 8, 10, 15]  # 聚类中心的个数or神经元的个数
+    k = [3, 6, 8, 10, 15]  # 聚类中心的个数
     method = ['max_centers_distance', 'max_centers_distance_divided_by_k']
     noise = np.random.uniform(low=-0.1, high=0.1, size=(n, d))
     sample = lhs(d, samples=n)  # LHS采样
@@ -75,7 +75,7 @@ if __name__ == '__main__':
 
     for i_k in k:
         for j_method in method:
-            rbf = RBF(i_k, x, y_noise.T, j_method)  # y得是行向量才行
+            rbf = RBF(i_k, x, y_noise.T, j_method) 
             rbf.k_means()
             rbf.weights_bias_calculate()
             data = rbf.return_data()
