@@ -66,7 +66,6 @@ if __name__ == '__main__':
     n = 100  # 数据的数量
     d = 1  # 数据的维度
     k = [3, 6, 8, 10, 15]  # 聚类中心的个数or神经元的个数
-    path = r'D:\图片\实验数据\RBF'  # 存放图片地址
     method = ['max_centers_distance', 'max_centers_distance_divided_by_k']
     noise = np.random.uniform(low=-0.1, high=0.1, size=(n, d))
     sample = lhs(d, samples=n)  # LHS采样
