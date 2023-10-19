@@ -84,13 +84,14 @@ if __name__ == '__main__':
             bias = data.bias_rbf
             centers = data.centers_rbf
             variances = data.variances_rbf
-            y_predict = rbf_predict(x, weights, bias, centers, variances)
+            x_predict = lhs(d, samples=n) * (ub - lb) + lb
+            y_predict = rbf_predict(x_predict, weights, bias, centers, variances)
 
             plt.figure(num=num)
             title_text = 'k numbers:{} \n calculate variances method:{}'.format(i_k, j_method)
             plt.scatter(x, y_actual, c='#ED5C27', label='y_actual')  # 绘制图像
             plt.scatter(x, y_noise, c='#40E0D0', label='y_noise')  # 绘制图像
-            plt.scatter(x, y_predict, c='#C0FF3E', label='y_predict')  # 绘制图像
+            plt.scatter(x_predict, y_predict, c='#C0FF3E', label='y_predict')  # 绘制图像
             plt.legend(loc='lower right')   # 添加图例
             plt.title(title_text)  # 添加标题
             num += 1
