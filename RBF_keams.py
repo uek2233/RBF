@@ -6,93 +6,141 @@ from sklearn.metrics import pairwise_distances
 
 
 class RBF(object):
-    def __init__(self, k_rbf, train_x_rbf, train_y_rbf, method_rbf):
+    """
+        param = {
+            'k': None,
+            'x': None,
+            'y': None,
+            'var_mod': None,
+            'ker_mod': None,
+        }
+    """
 
-        self.k = k_rbf  # 神经元的数量
-        self.train_x_rbf = train_x_rbf  # 训练数据的输入
-        self.train_y_rbf = train_y_rbf  # 训练数据输入的真实值
-        self.method_rbf = method_rbf  # 计算高斯核函数所用的方差所用到方法
-        self.centers_rbf = []  # 神经元中心
-        self.max_centers_distance_rbf = None  # 神经元之间的最大距离
-        self.variances_rbf = None  # 计算高斯核函数所用的方差
-        self.weights_rbf = None  # 输出权重
-        self.bias_rbf = None  # 偏置
+    def __init__(self, param):
+        self.k = int(param['k'])
+        self.x = param['x']
+        self.y = param['y']
+        self.n = self.x.shape[0]
+        self.d = self.x.shape[1]
+        self.var_mod = param['var_mod']
+        self.ker_mod = param['ker_mod']
+        self.center = None
+        self.var = None
+        self.w = None
+        self.b = None
 
-    def k_means(self):
-        k_means = KMeans(n_clusters=self.k, init='k-means++', max_iter=300, n_init=10, random_state=0)
-        k_means.fit(self.train_x_rbf)  # 使用训练数据进行聚类
-        self.centers_rbf = k_means.cluster_centers_  # 得到聚类中心
-        distances_km = pairwise_distances(self.centers_rbf, self.centers_rbf)  # 计算聚类中心之间距离
-        np.fill_diagonal(distances_km, 0)  # 将对角线元素设为0
-        self.max_centers_distance_rbf = np.max(distances_km)  # 得到聚类中心之间距离的最大值
+    def cal_center(self):
+        km = KMeans(n_clusters=self.k, init='k-means++', max_iter=300, n_init=10, random_state=0)
+        km.fit(self.x)
+        self.center = km.cluster_centers_
 
-    def weights_bias_calculate(self):
-        variances_broadcast_rbf = None
-        train_x_centers_distance = pairwise_distances(self.train_x_rbf, self.centers_rbf)  # 计算输入数据到聚类中心之间距离
+    def cal_var(self):
+        diff = pairwise_distances(self.center, self.center)
+        max_diff = np.max(diff[0])
+        bate = np.power((max_diff * self.n * self.d), (-1 / self.d))
+        match self.var_mod:
+            case 'bate1':
+                return bate
+            case 'bate2':
+                return bate * np.power(2, 4 * 1)
+            case 'bate3':
+                return bate * np.power(2, 4 * 2)
+            case 'bate4':
+                return bate * np.power(2, 4 * 3)
+            case 'max_dis':
+                return max_diff
+            case 'max_div_k':
+                return max_diff / np.sqrt(2 * self.k)
+            case 'mean_dis':
+                return np.sum(diff[0]) / (self.k - 1)
+            case 'dou_mean_dis':
+                return 2 * np.sum(diff[0]) / (self.k - 1)
 
-        if self.method_rbf == 'max_centers_distance':  # 判断计算高斯核函数所用的方差所用到方法
-            self.variances_rbf = self.max_centers_distance_rbf
-            variances_broadcast_rbf = np.full_like(train_x_centers_distance, self.variances_rbf)  # 将variances_rbf广播成train_x_centers_distance的形状
+    @staticmethod
+    def cal_hlo(ker_mod, dis, var):
+        match ker_mod:
+            case 'gaussian':
+                return np.exp(-0.5 * np.power(dis / var, 2))
+            case 'reflect':
+                return 1/(1 + np.exp(np.power(dis / var, 2)))
+            case 'laplacian':
+                return np.exp(-(dis / var))
+            case 'inverse':
+                return 1 / np.sqrt(np.power(dis, 2) + np.power(var, 2))
+            case 'multiquadric':
+                return np.sqrt(np.power(dis, 2) + np.power(var, 2))
+            case 'rational':
+                return 1 - (np.power(dis, 2) / (np.power(dis, 2) + np.power(var, 2)))
 
-        elif self.method_rbf == 'max_centers_distance_divided_by_k':
-            self.variances_rbf = self.max_centers_distance_rbf/np.sqrt(2*self.k)
-            variances_broadcast_rbf = np.full_like(train_x_centers_distance, self.variances_rbf)
-        hidden_layer_output_rbf = np.exp(-(train_x_centers_distance / variances_broadcast_rbf) ** 2)  # 计算隐含层输出
-        ones_column = np.ones((hidden_layer_output_rbf.shape[0], 1))  # 创建一个形状为(centers_centers_distance.shape[0], 1) 的全为1的列
-        hidden_layer_output_extend_rbf = np.hstack((hidden_layer_output_rbf, ones_column))  # 水平拼接隐含层输出和全为1的列，变为为广义rbf
-        hidden_layer_output_extend_inverse_rbf = np.linalg.pinv(hidden_layer_output_extend_rbf)  # 求伪逆矩阵
-        weights_bias_extend_rbf = np.dot(hidden_layer_output_extend_inverse_rbf, self.train_y_rbf.T)  # 计算权重与偏置项
-        self.weights_rbf = np.squeeze(weights_bias_extend_rbf)[0:self.k]
-        self.bias_rbf = np.squeeze(weights_bias_extend_rbf)[self.k]
+    def fit(self):
+        self.cal_center()
+        dis = pairwise_distances(self.x, self.center)
+        self.var = self.cal_var()
+        var = np.full_like(dis, self.var)
+        hlo = self.cal_hlo(self.ker_mod, dis, var)
+        ones = np.ones((hlo.shape[0], 1))
+        hlo = np.hstack((hlo, ones))
+        hlo_inv = np.linalg.pinv(hlo)
+        w_b = np.dot(hlo_inv, self.y)
+        self.w = w_b[0:self.k]
+        self.b = w_b[self.k]
 
-    def return_data(self):
+    def model_data(self):
         return self
 
 
-def rbf_predict(x_rp, weights_rp, bias_rp, centers_rp, variances_rp):
-    if np.ndim(x_rp) == 1:
-        x_rp = x_rp[np.newaxis, :]
-    distance_rp = pairwise_distances(x_rp, centers_rp)
-    variances_extend_rp = np.full_like(distance_rp, variances_rp)
-    hidden_layer_output_rp = np.exp(-(distance_rp / variances_extend_rp) ** 2)
-    y_rp = np.dot(hidden_layer_output_rp, weights_rp.T) + bias_rp
-    return y_rp
+def predict(param):
+    x = param['x']
+    w = param['w']
+    c = param['c']
+    b = param['b']
+    v = param['v']
+    m = param['ker_mod']
+    if np.ndim(x) == 1:
+        x = x[np.newaxis, :]
+    d = pairwise_distances(x, c)
+    v = np.full_like(d, v)
+    hlo = rbf.cal_hlo(m, d, v)
+    y = np.dot(hlo, w) + b
+    return y
 
 
 if __name__ == '__main__':
-    num = 0
-    ub = 1.0  # 上边界
-    lb = 0.0  # 下边界
-    n = 100  # 数据的数量
-    d = 1  # 数据的维度
-    k = [3, 6, 8, 10, 15]  # 聚类中心的个数
+    ub = 1.0  
+    lb = 0.0  
+    n = 100  
+    d = 1  
     method = ['max_centers_distance', 'max_centers_distance_divided_by_k']
     noise = np.random.uniform(low=-0.1, high=0.1, size=(n, d))
-    sample = lhs(d, samples=n)  # LHS采样
-    x = sample * (ub - lb) + lb
-    y_noise = (0.5 + (0.4 * np.cos((x * np.pi * 2.5)))) + noise
-    y_actual = (0.5 + (0.4 * np.cos((x * np.pi * 2.5))))
+    sample = lhs(d, samples=n)  
+    t_x = sample * (ub - lb) + lb
+    y_noise = (0.5 + (0.4 * np.cos((t_x * np.pi * 2.5)))) + noise
+    rbf_param = {
+        'k': 5,
+        'x': t_x,
+        'y': y_noise,
+        'var_mod': ['bate1', 'bate2', 'bate3', 'bate4', 'max_dis', 'max_div_k', 'mean_dis', 'dou_mean_dis'][4],
+        'ker_mod': ['gaussian', 'reflect', 'laplacian', 'inverse', 'multiquadric', 'rational'][0],
+    }
+    rbf = RBF(rbf_param)
+    rbf.fit()
+    p_x = lhs(d, samples=n) * (ub - lb) + lb
+    t_y = (0.5 + (0.4 * np.cos((p_x * np.pi * 2.5))))
+    pre_param = {
+        'x': p_x,
+        'w': rbf.model_data().w,
+        'c': rbf.model_data().center,
+        'b': rbf.model_data().b,
+        'v': rbf.model_data().var,
+        'ker_mod': rbf.model_data().ker_mod
+    }
+    p_y = predict(pre_param)
 
-    for i_k in k:
-        for j_method in method:
-            rbf = RBF(i_k, x, y_noise.T, j_method) 
-            rbf.k_means()
-            rbf.weights_bias_calculate()
-            data = rbf.return_data()
-
-            weights = data.weights_rbf
-            bias = data.bias_rbf
-            centers = data.centers_rbf
-            variances = data.variances_rbf
-            x_predict = lhs(d, samples=n) * (ub - lb) + lb
-            y_predict = rbf_predict(x_predict, weights, bias, centers, variances)
-
-            plt.figure(num=num)
-            title_text = 'k numbers:{} \n calculate variances method:{}'.format(i_k, j_method)
-            plt.scatter(x, y_actual, c='#ED5C27', label='y_actual')  # 绘制图像
-            plt.scatter(x, y_noise, c='#40E0D0', label='y_noise')  # 绘制图像
-            plt.scatter(x_predict, y_predict, c='#C0FF3E', label='y_predict')  # 绘制图像
-            plt.legend(loc='lower right')   # 添加图例
-            plt.title(title_text)  # 添加标题
-            num += 1
-    plt.show()  # 图像展示
+    plt.figure(num=1)
+    p_1, p_2 = rbf_param['var_mod'], rbf_param['ker_mod']
+    title_text = f'{p_1}&{p_2}'
+    plt.scatter(p_x, t_y, c='#ED5C27', label='y_actual')  
+    plt.scatter(p_x, p_y, c='#C0FF3E', label='y_predict')  
+    plt.legend(loc='lower right')   
+    plt.title(title_text)  
+    plt.show()  
